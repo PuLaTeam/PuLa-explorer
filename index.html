@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PuLaExPeLoReR</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs/loader.min.js"></script>
+    <style>
+        :root {
+            --accent: #0078d4;
+            --glass: rgba(22, 22, 26, 0.85);
+            --border: rgba(255, 255, 255, 0.12);
+            --blur: 30px;
+        }
+        * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { height: 100vh; overflow: hidden; background: #0c0d14 no-repeat center center fixed; background-size: cover; color: #fff; }
+
+        #drag-overlay { position: fixed; inset: 0; z-index: 9999999; display: none; }
+
+        /* Lock Screen */
+        #lock-screen {
+            position: fixed; inset: 0; z-index: 999999;
+            background: rgba(10, 15, 26, 0.88); backdrop-filter: blur(40px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: all 0.4s ease;
+        }
+        #lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+        .lock-avatar { width: 90px; height: 90px; border-radius: 50%; background: #1c202a; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 36px; margin-bottom: 12px; }
+        .lock-box input { padding: 9px 14px; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: #fff; outline: none; width: 220px; }
+
+        /* Desktop */
+        #desktop { height: calc(100vh - 48px); padding: 20px; display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start; gap: 20px; }
+        .desktop-icon { width: 80px; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 8px; transition: 0.15s; }
+        .desktop-icon:hover { background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); }
+        .desktop-icon i { font-size: 36px; display: block; margin-bottom: 6px; }
+        .desktop-icon span { font-size: 12px; text-shadow: 0 1px 3px #000; }
+
+        /* Windows */
+        .window {
+            position: absolute; min-width: 420px; min-height: 280px;
+            background: var(--glass); border: 1px solid var(--border); border-radius: 10px;
+            backdrop-filter: blur(var(--blur)); box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; z-index: 10;
+        }
+        .window.active { border-color: var(--accent); z-index: 100; }
+        .window.maximized { top: 0 !important; left: 0 !important; width: 100vw !important; height: calc(100vh - 48px) !important; border-radius: 0 !important; }
+        .window-header {
+            padding: 8px 14px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center; cursor: move;
+        }
+        .win-btn { background: none; border: none; color: #ccc; width: 30px; height: 26px; border-radius: 4px; cursor: pointer; }
+        .win-btn:hover { background: rgba(255,255,255,0.12); }
+        .win-btn.close:hover { background: #e81123; color: #fff; }
+        .window-body { flex: 1; overflow: auto; position: relative; display: flex; flex-direction: column; }
+
+        .win-resize-handle {
+            position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+            cursor: nwse-resize; z-index: 999;
+        }
+        .win-resize-handle::after {
+            content: ''; position: absolute; right: 4px; bottom: 4px;
+            width: 7px; height: 7px; border-right: 2px solid rgba(255,255,255,0.4);
+            border-bottom: 2px solid rgba(255,255,255,0.4);
+        }
+
+        /* Taskbar */
+        #taskbar {
+            position: fixed; bottom: 0; left: 0; right: 0; height: 48px;
+            background: rgba(18, 18, 22, 0.88); backdrop-filter: blur(25px);
+            border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; z-index: 99999;
+        }
+        .taskbar-center { display: flex; gap: 8px; transition: 0.3s; }
+        .taskbar-center.center { position: absolute; left: 50%; transform: translateX(-50%); }
+        .taskbar-center.left { margin-left: 20px; }
+        .task-btn { width: 40px; height: 40px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: 0.2s; }
+        .task-btn:hover { background: rgba(255,255,255,0.12); }
+
+        /* Explorer */
+        .explorer-toolbar { padding: 8px 12px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+        .explorer-toolbar button { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; padding: 6px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; }
+        .explorer-toolbar button:hover { background: rgba(255,255,255,0.12); }
+        .explorer-path { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; padding: 6px 10px; border-radius: 5px; font-size: 13px; outline: none; }
+        .file-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); gap: 12px; padding: 15px; align-content: flex-start; }
+        .file-item { text-align: center; padding: 10px 4px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+        .file-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); }
+        .file-item.selected { background: rgba(0, 120, 212, 0.25); border-color: var(--accent); }
+        .file-item i { font-size: 34px; margin-bottom: 6px; display: block; }
+        .file-item span { font-size: 12px; word-break: break-all; }
+
+        /* Settings Tabs */
+        .settings-container { display: flex; height: 100%; }
+        .settings-sidebar { width: 180px; background: rgba(0,0,0,0.2); border-right: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .settings-tab-btn { padding: 8px 12px; background: none; border: none; color: #ccc; border-radius: 6px; text-align: left; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .settings-tab-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .settings-tab-btn.active { background: var(--accent); color: #fff; }
+        .settings-content { flex: 1; padding: 20px; overflow-y: auto; }
+        .settings-group { margin-bottom: 22px; }
+        .settings-group h4 { margin-bottom: 10px; font-size: 14px; color: #eee; }
+        .color-dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; display: inline-block; border: 2px solid transparent; margin-right: 8px; }
+        .color-dot.active { border-color: #fff; transform: scale(1.1); }
+        .wall-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
+        .wall-card { height: 70px; border-radius: 6px; background-size: cover; background-position: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; display: flex; align-items: flex-end; padding: 6px; font-size: 11px; text-shadow: 0 1px 3px #000; font-weight: bold; }
+        .wall-card:hover { border-color: var(--accent); transform: scale(1.02); }
+
+        /* Context Menu */
+        #context-menu {
+            position: fixed; display: none; z-index: 999999; width: 220px;
+            background: rgba(28, 28, 32, 0.96); backdrop-filter: blur(25px);
+            border: 1px solid var(--border); border-radius: 10px; padding: 6px 0; box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+        }
+        .ctx-item { padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 12px; cursor: pointer; color: #eee; }
+        .ctx-item:hover { background: var(--accent); color: #fff; }
+        .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+    </style>
+</head>
+<body>
+
+    <div id="drag-overlay"></div>
+
+    <!-- Lock Screen -->
+    <div id="lock-screen">
+        <div id="lock-clock" style="font-size: 60px; font-weight: 300; margin-bottom: 25px;">12:00</div>
+        <div class="lock-avatar"><i class="fa-solid fa-server"></i></div>
+        <h3 style="margin-bottom: 15px;">PuLaExPeLoReR</h3>
+        <div class="lock-box" style="display: flex; gap: 8px;">
+            <input type="password" id="login-pwd" placeholder="Password (default: admin)" onkeydown="if(event.key==='Enter') doLogin()">
+            <button onclick="doLogin()" style="background:var(--accent); border:none; color:#fff; width:36px; border-radius:6px; cursor:pointer;"><i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+        <div id="login-err" style="color: #ff5555; font-size: 13px; margin-top: 10px;"></div>
+    </div>
+
+    <!-- Desktop -->
+    <div id="desktop">
+        <div class="desktop-icon" onclick="openExplorer('/root')">
+            <i class="fa-solid fa-folder-tree" style="color: #f6d365;"></i>
+            <span>Files</span>
+        </div>
+        <div class="desktop-icon" onclick="openVSCode()">
+            <i class="fa-solid fa-code" style="color: #38bdf8;"></i>
+            <span>VS Code</span>
+        </div>
+        <div class="desktop-icon" onclick="openTerminal()">
+            <i class="fa-solid fa-terminal" style="color: #4ade80;"></i>
+            <span>Terminal</span>
+        </div>
+        <div class="desktop-icon" onclick="openEditor('')">
+            <i class="fa-solid fa-file-signature" style="color: #a78bfa;"></i>
+            <span>Editor</span>
+        </div>
+        <div class="desktop-icon" onclick="openMonitor()">
+            <i class="fa-solid fa-chart-pie" style="color: #f43f5e;"></i>
+            <span>Monitor</span>
+        </div>
+        <div class="desktop-icon" onclick="openSettings()">
+            <i class="fa-solid fa-gear" style="color: #94a3b8;"></i>
+            <span>Settings</span>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu">
+        <div class="ctx-item" onclick="ctxAction('open')"><i class="fa-solid fa-folder-open"></i> Open</div>
+        <div class="ctx-item" onclick="ctxAction('edit')"><i class="fa-solid fa-file-pen"></i> Quick Edit</div>
+        <div class="ctx-item" onclick="ctxAction('vscode')"><i class="fa-solid fa-code"></i> Open in VS Code</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxAction('zip')"><i class="fa-solid fa-file-zipper"></i> Zip (Compress)</div>
+        <div class="ctx-item" id="ctx-unzip" onclick="ctxAction('unzip')"><i class="fa-solid fa-box-open"></i> Unzip (Extract)</div>
+        <div class="ctx-item" onclick="ctxAction('duplicate')"><i class="fa-solid fa-clone"></i> Duplicate</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxAction('rename')"><i class="fa-solid fa-i-cursor"></i> Rename</div>
+        <div class="ctx-item" onclick="ctxAction('chmod')"><i class="fa-solid fa-shield-halved"></i> Permissions (chmod)</div>
+        <div class="ctx-item" onclick="ctxAction('copypath')"><i class="fa-solid fa-link"></i> Copy Path</div>
+        <div class="ctx-item" onclick="ctxAction('download')"><i class="fa-solid fa-download"></i> Download</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxAction('delete')" style="color: #f87171;"><i class="fa-solid fa-trash"></i> Delete</div>
+    </div>
+
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <div style="font-size: 13px; color: #888;"><i class="fa-solid fa-server"></i> PuLaExPeLoReR</div>
+        <div class="taskbar-center center" id="tb-center">
+            <div class="task-btn" onclick="openExplorer('/root')" title="Files"><i class="fa-solid fa-folder" style="color:#f6d365;"></i></div>
+            <div class="task-btn" onclick="openVSCode()" title="VS Code"><i class="fa-solid fa-code" style="color:#38bdf8;"></i></div>
+            <div class="task-btn" onclick="openTerminal()" title="Terminal"><i class="fa-solid fa-terminal" style="color:#4ade80;"></i></div>
+            <div class="task-btn" onclick="openMonitor()" title="Monitor"><i class="fa-solid fa-chart-line" style="color:#f43f5e;"></i></div>
+            <div class="task-btn" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear" style="color:#94a3b8;"></i></div>
+        </div>
+        <div id="clock" style="font-size: 12px; text-align: right; line-height: 1.3;">00:00</div>
+    </div>
+
+    <script>
+        let zTop = 100;
+        let selectedItem = null;
+        let currentExplorerPath = '/root';
+        let termFontSize = 14;
+        let vscodePort = 8587;
+        const overlay = document.getElementById('drag-overlay');
+
+        setInterval(() => {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('clock').innerHTML = `${timeStr}<br>${now.toLocaleDateString()}`;
+            document.getElementById('lock-clock').innerText = timeStr;
+        }, 1000);
+
+        async function initApp() {
+            try {
+                const confRes = await fetch('/api/config');
+                const confData = await confRes.json();
+                if(confData.vscode_port) vscodePort = confData.vscode_port;
+
+                const r = await fetch('/api/settings');
+                const d = await r.json();
+                if(d.wallpaper) document.body.style.backgroundImage = `url('${d.wallpaper}')`;
+                if(d.accent) document.documentElement.style.setProperty('--accent', d.accent);
+                if(d.blur_level) document.documentElement.style.setProperty('--blur', d.blur_level);
+                if(d.term_fontsize) termFontSize = parseInt(d.term_fontsize);
+                if(d.taskbar_align) {
+                    const tb = document.getElementById('tb-center');
+                    tb.className = 'taskbar-center ' + d.taskbar_align;
+                }
+            } catch(e){}
+        }
+        initApp();
+
+        async function doLogin() {
+            const pwd = document.getElementById('login-pwd').value;
+            const fd = new FormData();
+            fd.append('username', 'admin');
+            fd.append('password', pwd);
+            const res = await fetch('/api/auth/login', { method: 'POST', body: fd });
+            if(res.ok) document.getElementById('lock-screen').classList.add('unlocked');
+            else document.getElementById('login-err').innerText = 'Password incorrect!';
+        }
+
+        function createWindow(title, w = 780, h = 480) {
+            const win = document.createElement('div');
+            win.className = 'window active';
+            win.style.width = w + 'px';
+            win.style.height = h + 'px';
+            win.style.left = (100 + Math.random() * 50) + 'px';
+            win.style.top = (40 + Math.random() * 40) + 'px';
+            win.style.zIndex = ++zTop;
+
+            win.innerHTML = `
+                <div class="window-header">
+                    <span>${title}</span>
+                    <div>
+                        <button class="win-btn max-btn"><i class="fa-regular fa-square"></i></button>
+                        <button class="win-btn close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="window-body"></div>
+                <div class="win-resize-handle"></div>
+            `;
+
+            const maxBtn = win.querySelector('.max-btn');
+            const toggleMax = () => {
+                if (win.classList.contains('maximized')) {
+                    win.classList.remove('maximized');
+                    win.style.width = win.dataset.origW;
+                    win.style.height = win.dataset.origH;
+                    win.style.top = win.dataset.origT;
+                    win.style.left = win.dataset.origL;
+                    maxBtn.innerHTML = '<i class="fa-regular fa-square"></i>';
+                } else {
+                    win.dataset.origW = win.style.width;
+                    win.dataset.origH = win.style.height;
+                    win.dataset.origT = win.style.top;
+                    win.dataset.origL = win.style.left;
+                    win.classList.add('maximized');
+                    maxBtn.innerHTML = '<i class="fa-regular fa-window-restore"></i>';
+                }
+            };
+            maxBtn.onclick = toggleMax;
+            win.querySelector('.close').onclick = () => win.remove();
+
+            const header = win.querySelector('.window-header');
+            header.ondblclick = (e) => { if(!e.target.closest('.win-btn')) toggleMax(); };
+            header.onmousedown = (e) => {
+                if(e.target.closest('.win-btn') || win.classList.contains('maximized')) return;
+                win.style.zIndex = ++zTop;
+                overlay.style.display = 'block';
+                overlay.style.cursor = 'move';
+
+                const rect = win.getBoundingClientRect();
+                const shiftX = e.clientX - rect.left;
+                const shiftY = e.clientY - rect.top;
+
+                function move(ev) {
+                    win.style.left = Math.max(0, ev.clientX - shiftX) + 'px';
+                    win.style.top = Math.max(0, ev.clientY - shiftY) + 'px';
+                }
+                function stop() {
+                    overlay.style.display = 'none';
+                    window.removeEventListener('mousemove', move);
+                    window.removeEventListener('mouseup', stop);
+                }
+                window.addEventListener('mousemove', move);
+                window.addEventListener('mouseup', stop);
+            };
+
+            const rHandle = win.querySelector('.win-resize-handle');
+            rHandle.onmousedown = (e) => {
+                e.stopPropagation();
+                if (win.classList.contains('maximized')) return;
+                win.style.zIndex = ++zTop;
+                overlay.style.display = 'block';
+                overlay.style.cursor = 'nwse-resize';
+
+                const startW = win.offsetWidth;
+                const startH = win.offsetHeight;
+                const startX = e.clientX;
+                const startY = e.clientY;
+
+                function doResize(ev) {
+                    win.style.width = Math.max(380, startW + (ev.clientX - startX)) + 'px';
+                    win.style.height = Math.max(220, startH + (ev.clientY - startY)) + 'px';
+                }
+                function stopResize() {
+                    overlay.style.display = 'none';
+                    window.removeEventListener('mousemove', doResize);
+                    window.removeEventListener('mouseup', stopResize);
+                }
+                window.addEventListener('mousemove', doResize);
+                window.addEventListener('mouseup', stopResize);
+            };
+
+            win.onmousedown = () => win.style.zIndex = ++zTop;
+            document.body.appendChild(win);
+            return win.querySelector('.window-body');
+        }
+
+        // --- Explorer ---
+        function openExplorer(path = '/root') {
+            const body = createWindow('<i class="fa-solid fa-folder-tree" style="color:#f6d365;"></i> File Explorer', 860, 520);
+            body.innerHTML = `
+                <div class="explorer-toolbar">
+                    <button onclick="navigateDir('..')"><i class="fa-solid fa-arrow-up"></i></button>
+                    <button onclick="navigateDir('/root')"><i class="fa-solid fa-house"></i></button>
+                    <input type="text" class="explorer-path" value="${path}">
+                    <button onclick="promptAction('newfile')"><i class="fa-solid fa-file-circle-plus"></i> New File</button>
+                    <button onclick="promptAction('mkdir')"><i class="fa-solid fa-folder-plus"></i> New Folder</button>
+                    <button onclick="document.getElementById('hidden-up').click()"><i class="fa-solid fa-cloud-arrow-up"></i> Upload</button>
+                    <input type="file" id="hidden-up" multiple style="display:none;" onchange="handleUpload(this)">
+                </div>
+                <div class="file-grid"></div>
+            `;
+            const pathInp = body.querySelector('.explorer-path');
+            pathInp.onkeydown = (e) => { if(e.key === 'Enter') renderFiles(pathInp.value, body); };
+            renderFiles(path, body);
+        }
+
+        async function renderFiles(path, bodyEl) {
+            currentExplorerPath = path;
+            const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+            if(!res.ok) return;
+            const data = await res.json();
+            bodyEl.querySelector('.explorer-path').value = data.current_path;
+            currentExplorerPath = data.current_path;
+            const grid = bodyEl.querySelector('.file-grid');
+            grid.innerHTML = '';
+
+            data.items.forEach(item => {
+                const f = document.createElement('div');
+                f.className = 'file-item';
+                let icon = item.is_dir ? 'fa-folder' : (item.name.endsWith('.zip') ? 'fa-file-zipper' : 'fa-file-lines');
+                f.innerHTML = `
+                    <i class="fa-solid ${icon}" style="color:${item.is_dir?'#f6d365':(item.name.endsWith('.zip')?'#f87171':'#94a3b8')}"></i>
+                    <span>${item.name}</span>
+                `;
+                f.onclick = (e) => {
+                    e.stopPropagation();
+                    document.querySelectorAll('.file-item').forEach(i => i.classList.remove('selected'));
+                    f.classList.add('selected');
+                    selectedItem = item;
+                };
+                f.ondblclick = () => {
+                    if(item.is_dir) renderFiles(item.path, bodyEl);
+                    else openEditor(item.path);
+                };
+                f.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    selectedItem = item;
+                    showContextMenu(e.clientX, e.clientY, item);
+                };
+                grid.appendChild(f);
+            });
+        }
+
+        function navigateDir(rel) {
+            const p = rel === '..' ? currentExplorerPath.substring(0, currentExplorerPath.lastIndexOf('/')) || '/' : rel;
+            const activeBody = document.querySelector('.window.active .window-body');
+            if(activeBody) renderFiles(p, activeBody);
+        }
+
+        async function handleUpload(input) {
+            const fd = new FormData();
+            fd.append('path', currentExplorerPath);
+            for(let f of input.files) fd.append('files', f);
+            await fetch('/api/file/upload', { method: 'POST', body: fd });
+            const activeBody = document.querySelector('.window.active .window-body');
+            renderFiles(currentExplorerPath, activeBody);
+        }
+
+        const cm = document.getElementById('context-menu');
+        function showContextMenu(x, y, item) {
+            cm.style.display = 'block';
+            cm.style.left = Math.min(x, window.innerWidth - 240) + 'px';
+            cm.style.top = Math.min(y, window.innerHeight - 360) + 'px';
+            document.getElementById('ctx-unzip').style.display = item.name.endsWith('.zip') ? 'flex' : 'none';
+        }
+        window.addEventListener('click', () => cm.style.display = 'none');
+
+        async function ctxAction(action) {
+            if(!selectedItem) return;
+            const activeBody = document.querySelector('.window.active .window-body');
+            if(action === 'open') {
+                if(selectedItem.is_dir) renderFiles(selectedItem.path, activeBody);
+                else openEditor(selectedItem.path);
+            } else if(action === 'edit') openEditor(selectedItem.path);
+            else if(action === 'vscode') openVSCode(selectedItem.path);
+            else if(action === 'download') window.open(`/api/file/download?path=${encodeURIComponent(selectedItem.path)}`);
+            else if(action === 'copypath') { navigator.clipboard.writeText(selectedItem.path); alert('Copied!'); }
+            else if(action === 'rename') {
+                const name = prompt('New name:', selectedItem.name);
+                if(name) fileOp('rename', selectedItem.path, name);
+            } else if(action === 'chmod') {
+                const perm = prompt('Chmod:', selectedItem.permissions);
+                if(perm) fileOp('chmod', selectedItem.path, perm);
+            } else if(action === 'delete') {
+                if(confirm(`Delete ${selectedItem.name}?`)) fileOp('delete', selectedItem.path);
+            } else if(action === 'zip' || action === 'unzip' || action === 'duplicate') {
+                fileOp(action, selectedItem.path);
+            }
+        }
+
+        async function promptAction(action) {
+            const name = prompt(action === 'mkdir' ? 'Folder Name:' : 'File Name:');
+            if(name) fileOp(action, currentExplorerPath, name);
+        }
+
+        async function fileOp(action, path, extra = '') {
+            const fd = new FormData();
+            fd.append('action', action);
+            fd.append('path', path);
+            if(extra) fd.append('extra', extra);
+            await fetch('/api/file/action', { method: 'POST', body: fd });
+            const activeBody = document.querySelector('.window.active .window-body');
+            if(activeBody) renderFiles(currentExplorerPath, activeBody);
+        }
+
+        // --- Real VS Code ---
+        function openVSCode(path = '/root') {
+            const body = createWindow('<i class="fa-solid fa-code" style="color:#38bdf8;"></i> Visual Studio Code (Real)', 1000, 640);
+            const vsUrl = `http://${window.location.hostname}:${vscodePort}/?folder=${encodeURIComponent(path)}`;
+            body.innerHTML = `
+                <div style="background:#222; padding:5px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
+                    <span style="font-size:12px; color:#aaa;"><i class="fa-solid fa-bolt"></i> Port ${vscodePort} Live</span>
+                    <a href="${vsUrl}" target="_blank" style="color:var(--accent); text-decoration:none; font-size:12px; font-weight:bold;">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open in New Tab
+                    </a>
+                </div>
+                <iframe src="${vsUrl}" style="width:100%; height:100%; border:none; background:#1e1e1e;" allow="clipboard-read; clipboard-write"></iframe>
+            `;
+        }
+
+        // --- Terminal ---
+        function openTerminal() {
+            const body = createWindow('<i class="fa-solid fa-terminal" style="color:#4ade80;"></i> Root Bash Shell', 780, 460);
+            body.style.background = '#0a0a0a';
+            const term = new Terminal({ theme: { background: '#0a0a0a' }, cursorBlink: true, fontSize: termFontSize });
+            term.open(body);
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${proto}//${location.host}/ws/terminal`);
+            ws.binaryType = "arraybuffer";
+            ws.onmessage = (e) => term.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
+            term.onData(data => ws.send(data));
+        }
+
+        // --- Monaco Quick Editor ---
+        function openEditor(filePath = '') {
+            const body = createWindow(`<i class="fa-solid fa-file-pen"></i> Editor - ${filePath || 'New File'}`, 800, 500);
+            body.innerHTML = `
+                <div style="padding:6px; background:#222; border-bottom:1px solid #333; display:flex; gap:10px;">
+                    <button id="save-f" style="background:var(--accent); color:#fff; border:none; padding:4px 12px; border-radius:4px; cursor:pointer;"><i class="fa-solid fa-floppy-disk"></i> Save (Ctrl+S)</button>
+                    <span style="font-size:12px; align-self:center; color:#aaa;">${filePath}</span>
+                </div>
+                <div id="monaco-box" style="flex:1;"></div>
+            `;
+            require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs' } });
+            require(['vs/editor/editor.main'], async () => {
+                let code = "";
+                if(filePath) {
+                    try {
+                        const r = await fetch(`/api/file/read?path=${encodeURIComponent(filePath)}`);
+                        code = (await r.json()).content;
+                    } catch(e){}
+                }
+                const ed = monaco.editor.create(body.querySelector('#monaco-box'), {
+                    value: code, language: 'shell', theme: 'vs-dark', automaticLayout: true
+                });
+                body.querySelector('#save-f').onclick = async () => {
+                    const fd = new FormData();
+                    fd.append('path', filePath);
+                    fd.append('content', ed.getValue());
+                    await fetch('/api/file/save', { method: 'POST', body: fd });
+                    alert('Saved!');
+                };
+            });
+        }
+
+        // --- Task Manager ---
+        function openMonitor() {
+            const body = createWindow('<i class="fa-solid fa-chart-line" style="color:#f43f5e;"></i> Task Manager', 520, 340);
+            body.innerHTML = `
+                <div style="padding:15px; display:flex; flex-direction:column; gap:15px;">
+                    <div>CPU Load: <span id="cpu-t">0%</span><div style="height:8px;background:#333;border-radius:4px;"><div id="cpu-b" style="height:100%;width:0;background:var(--accent);transition:0.3s;"></div></div></div>
+                    <div>RAM Usage: <span id="ram-t">0GB</span><div style="height:8px;background:#333;border-radius:4px;"><div id="ram-b" style="height:100%;width:0;background:#4ade80;transition:0.3s;"></div></div></div>
+                    <div>Root Disk: <span id="dsk-t">0%</span><div style="height:8px;background:#333;border-radius:4px;"><div id="dsk-b" style="height:100%;width:0;background:#f59e0b;transition:0.3s;"></div></div></div>
+                </div>
+            `;
+            const iv = setInterval(async () => {
+                if(!document.body.contains(body)) { clearInterval(iv); return; }
+                const r = await fetch('/api/system/stats');
+                const d = await r.json();
+                body.querySelector('#cpu-t').innerText = d.cpu + '%';
+                body.querySelector('#cpu-b').style.width = d.cpu + '%';
+                body.querySelector('#ram-t').innerText = `${d.ram_used}GB / ${d.ram_total}GB (${d.ram}%)`;
+                body.querySelector('#ram-b').style.width = d.ram + '%';
+                body.querySelector('#dsk-t').innerText = d.disk + '%';
+                body.querySelector('#dsk-b').style.width = d.disk + '%';
+            }, 1500);
+        }
+
+        // --- Settings App ---
+        function openSettings() {
+            const body = createWindow('<i class="fa-solid fa-gear"></i> Control Center & Settings', 680, 500);
+            body.innerHTML = `
+                <div class="settings-container">
+                    <div class="settings-sidebar">
+                        <button class="settings-tab-btn active" onclick="switchTab('tab-personal', this)"><i class="fa-solid fa-paintbrush"></i> Appearance</button>
+                        <button class="settings-tab-btn" onclick="switchTab('tab-taskbar', this)"><i class="fa-solid fa-bars"></i> Taskbar</button>
+                        <button class="settings-tab-btn" onclick="switchTab('tab-terminal', this)"><i class="fa-solid fa-terminal"></i> Terminal</button>
+                        <button class="settings-tab-btn" onclick="switchTab('tab-security', this)"><i class="fa-solid fa-lock"></i> Security</button>
+                        <button class="settings-tab-btn" onclick="switchTab('tab-sysinfo', this)"><i class="fa-solid fa-circle-info"></i> System Info</button>
+                    </div>
+                    <div class="settings-content">
+                        <div id="tab-personal" class="settings-tab">
+                            <div class="settings-group">
+                                <h4>Accent Color</h4>
+                                <div class="color-dot" style="background:#0078d4;" onclick="setAccent('#0078d4')"></div>
+                                <div class="color-dot" style="background:#10b981;" onclick="setAccent('#10b981')"></div>
+                                <div class="color-dot" style="background:#8b5cf6;" onclick="setAccent('#8b5cf6')"></div>
+                                <div class="color-dot" style="background:#f97316;" onclick="setAccent('#f97316')"></div>
+                                <div class="color-dot" style="background:#ef4444;" onclick="setAccent('#ef4444')"></div>
+                            </div>
+                            <div class="settings-group">
+                                <h4>Curated 4K Wallpapers</h4>
+                                <div class="wall-grid">
+                                    <div class="wall-card" style="background-image:url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80');" onclick="setWall('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80')">Dark Bloom</div>
+                                    <div class="wall-card" style="background-image:url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=600&q=80');" onclick="setWall('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1920&q=80')">Cyberpunk Neon</div>
+                                    <div class="wall-card" style="background-image:url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80');" onclick="setWall('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80')">Tokyo Night</div>
+                                    <div class="wall-card" style="background-image:url('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=600&q=80');" onclick="setWall('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80')">Deep Nebula</div>
+                                    <div class="wall-card" style="background-image:url('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=600&q=80');" onclick="setWall('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1920&q=80')">Dark Forest</div>
+                                    <div class="wall-card" style="background:#000; border:1px solid #333;" onclick="setWall('https://images.unsplash.com/photo-1550684376-efcbd6e3f031?auto=format&fit=crop&w=1920&q=80')">AMOLED Black</div>
+                                </div>
+                                <input type="text" id="cust-wall" placeholder="Paste custom image link..." style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;border-radius:4px;">
+                                <button onclick="setWall(document.getElementById('cust-wall').value)" style="margin-top:6px;background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">Apply Link</button>
+                            </div>
+                            <div class="settings-group">
+                                <h4>Glass Blur</h4>
+                                <select onchange="setBlur(this.value)" style="padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:4px;">
+                                    <option value="15px">Low</option>
+                                    <option value="30px" selected>Medium</option>
+                                    <option value="50px">High</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="tab-taskbar" class="settings-tab" style="display:none;">
+                            <div class="settings-group">
+                                <h4>Taskbar Alignment</h4>
+                                <button class="explorer-toolbar button" onclick="setTaskbar('center')"><i class="fa-solid fa-align-center"></i> Center (Windows 11)</button>
+                                <button class="explorer-toolbar button" onclick="setTaskbar('left')" style="margin-left:8px;"><i class="fa-solid fa-align-left"></i> Left (Windows 10)</button>
+                            </div>
+                        </div>
+
+                        <div id="tab-terminal" class="settings-tab" style="display:none;">
+                            <div class="settings-group">
+                                <h4>Terminal Font Size</h4>
+                                <select onchange="setTermFont(this.value)" style="padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:4px;">
+                                    <option value="13">Small (13px)</option>
+                                    <option value="14" selected>Default (14px)</option>
+                                    <option value="16">Large (16px)</option>
+                                    <option value="18">Extra Large (18px)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="tab-security" class="settings-tab" style="display:none;">
+                            <div class="settings-group">
+                                <h4>Change Root Password</h4>
+                                <input type="password" id="old-p" placeholder="Current Password" style="display:block;margin:6px 0;padding:6px;width:240px;background:#222;border:1px solid #444;color:#fff;border-radius:4px;">
+                                <input type="password" id="new-p" placeholder="New Password" style="display:block;margin:6px 0;padding:6px;width:240px;background:#222;border:1px solid #444;color:#fff;border-radius:4px;">
+                                <button onclick="changePassword()" style="background:var(--accent);border:none;color:#fff;padding:6px 15px;border-radius:4px;cursor:pointer;">Update Password</button>
+                            </div>
+                        </div>
+
+                        <div id="tab-sysinfo" class="settings-tab" style="display:none;">
+                            <div class="settings-group" id="sysinfo-box">Loading server info...</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function switchTab(tabId, btn) {
+            document.querySelectorAll('.settings-tab').forEach(t => t.style.display = 'none');
+            document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).style.display = 'block';
+            btn.classList.add('active');
+
+            if(tabId === 'tab-sysinfo') {
+                fetch('/api/system/info').then(r => r.json()).then(d => {
+                    document.getElementById('sysinfo-box').innerHTML = `
+                        <p style="margin-bottom:8px;"><strong>OS:</strong> ${d.os}</p>
+                        <p style="margin-bottom:8px;"><strong>Architecture:</strong> ${d.arch}</p>
+                        <p style="margin-bottom:8px;"><strong>CPU Threads:</strong> ${d.cpu_count}</p>
+                        <p style="margin-bottom:8px;"><strong>Uptime:</strong> ${d.uptime}</p>
+                        <p style="margin-bottom:8px;"><strong>Python:</strong> ${d.python_v}</p>
+                    `;
+                });
+            }
+        }
+
+        async function saveConfig(k, v) {
+            const fd = new FormData();
+            fd.append('key', k);
+            fd.append('value', v);
+            await fetch('/api/settings', { method: 'POST', body: fd });
+        }
+
+        function setWall(url) {
+            if(!url) return;
+            document.body.style.backgroundImage = `url('${url}')`;
+            saveConfig('wallpaper', url);
+        }
+        function setAccent(color) {
+            document.documentElement.style.setProperty('--accent', color);
+            saveConfig('accent', color);
+        }
+        function setBlur(val) {
+            document.documentElement.style.setProperty('--blur', val);
+            saveConfig('blur_level', val);
+        }
+        function setTaskbar(align) {
+            const tb = document.getElementById('tb-center');
+            tb.className = 'taskbar-center ' + align;
+            saveConfig('taskbar_align', align);
+        }
+        function setTermFont(val) {
+            termFontSize = parseInt(val);
+            saveConfig('term_fontsize', val);
+        }
+        async function changePassword() {
+            const oldP = document.getElementById('old-p').value;
+            const newP = document.getElementById('new-p').value;
+            const fd = new FormData();
+            fd.append('current_password', oldP);
+            fd.append('new_password', newP);
+            const res = await fetch('/api/auth/change-password', { method: 'POST', body: fd });
+            if(res.ok) alert('Password updated successfully!');
+            else alert('Failed to update password');
+        }
+    </script>
+</body>
+</html>
