@@ -1,5 +1,5 @@
 #!/bin/bash
-pip3 install -r requirements.txt --break-system-packages
+
 # شناسایی مسیر اصلی پوشه اسکریپت (تا از هر مسیری صدا زده بشه درست کار کنه)
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
