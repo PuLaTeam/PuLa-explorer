@@ -66,10 +66,9 @@ Powered by **FastAPI, WebSockets, xterm.js, and SQLite**, it provides a complete
 
 ### 1. Clone & Run
 ```bash
-git clone https://github.com/YOUR_USERNAME/PuLa-fileexpelorer.git
-cd PuLa-fileexpelorer
-chmod +x start.sh
-./start.sh
+git clone https://github.com/PuLaTeam/PuLa-explorer.git
+cd PuLa-explorer/
+chmod +x pula.sh
 ./pula.sh
 ```
 
