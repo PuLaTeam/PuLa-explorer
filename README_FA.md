@@ -67,10 +67,10 @@
 
 ### ۱. کلون مخزن و اجرا:
 ```bash
-git clone https://github.com/YOUR_USERNAME/PuLa-fileexpelorer.git
-cd PuLa-fileexpelorer
-chmod +x start.sh
-./start.sh
+git clone https://github.com/PuLaTeam/PuLa-explorer.git
+cd PuLa-explorer
+chmod +x pula.sh
+./pula.sh
 ```
 
 ### ۲. انتخاب پورت:
@@ -82,6 +82,10 @@ chmod +x start.sh
 ### ۳. اطلاعات ورود پیش‌فرض:
 - **نام کاربری:** `admin`
 - **رمز عبور:** `admin` *(از طریق نرم‌افزار Settings قابل تغییر است)*
+
+
+### 4. کامند پولا
+- در هر جایی از ترمینال بنویسید ```pula``` تا پنل اکسپلورر برای شما باز شود کارایی ها: تغییر رمز و پورت ران کردن و استاپ   
 
 ---
 
