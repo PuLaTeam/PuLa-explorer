@@ -85,7 +85,7 @@ The interactive installer will ask you for a primary port (default: `8586`):
 - **Password:** `admin` *(Can be changed from the Settings app)*
 
 ### 4. pula command
-- everywhere on terminal you can type ```bash pula``` for the explorer panel
+- everywhere on terminal you can type ```pula``` for the explorer panel
 
 ---
 
