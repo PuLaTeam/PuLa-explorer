@@ -70,6 +70,7 @@ git clone https://github.com/YOUR_USERNAME/PuLa-fileexpelorer.git
 cd PuLa-fileexpelorer
 chmod +x start.sh
 ./start.sh
+./pula.sh
 ```
 
 ### 2. Port Selection
@@ -82,6 +83,9 @@ The interactive installer will ask you for a primary port (default: `8586`):
 ### 3. Default Login
 - **Username:** `admin`
 - **Password:** `admin` *(Can be changed from the Settings app)*
+
+### 4. pula command
+- everywhere on terminal you can type ```bash pula``` for the explorer panel
 
 ---
 
