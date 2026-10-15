@@ -80,7 +80,6 @@ The interactive installer will ask you for a primary port (default: `8586`):
 - Detects the server's public IP and displays direct links.
 
 ### 3. Default Login
-- **Username:** `admin`
 - **Password:** `admin` *(Can be changed from the Settings app)*
 
 ### 4. pula command
