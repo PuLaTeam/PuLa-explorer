@@ -53,10 +53,12 @@ start_service() {
     ufw allow $VSCODE_PORT/tcp 2>/dev/null || iptables -A INPUT -p tcp --dport $VSCODE_PORT -j ACCEPT 2>/dev/null
 
     pkill -f "code-server" 2>/dev/null
-    nohup code-server --bind-addr 0.0.0.0:$VSCODE_PORT --auth none --disable-telemetry > "$VS_LOG" 2>&1 &
+    setsid nohup code-server --bind-addr 0.0.0.0:$VSCODE_PORT --auth none --disable-telemetry < /dev/null > "$VS_LOG" 2>&1 &
+    disown $! 2>/dev/null
     
     pkill -f "server.py" 2>/dev/null
-    nohup env PULA_MAIN_PORT=$MAIN_PORT PULA_VSCODE_PORT=$VSCODE_PORT python3 "$SCRIPT_DIR/server.py" > "$LOG_FILE" 2>&1 &
+    setsid nohup env PULA_MAIN_PORT=$MAIN_PORT PULA_VSCODE_PORT=$VSCODE_PORT python3 "$SCRIPT_DIR/server.py" < /dev/null > "$LOG_FILE" 2>&1 &
+    disown $! 2>/dev/null
 
     sleep 2
     if is_running; then

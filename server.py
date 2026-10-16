@@ -30,6 +30,15 @@ app.add_middleware(
 DB_PATH = "desktop.db"
 VSCODE_PORT = int(os.environ.get("PULA_VSCODE_PORT", 8587))
 
+def get_safe_base_dir(requested_path=None):
+    if requested_path and requested_path not in ["None", "undefined", ""]:
+        expanded = os.path.abspath(os.path.expanduser(requested_path))
+        if os.path.exists(expanded) and os.access(expanded, os.R_OK):
+            return expanded
+    if os.path.exists("/root") and os.access("/root", os.R_OK | os.X_OK):
+        return "/root"
+    return os.path.expanduser("~")
+
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
@@ -55,7 +64,10 @@ init_db()
 
 @app.get("/api/config")
 def get_config():
-    return {"vscode_port": VSCODE_PORT}
+    return {
+        "vscode_port": VSCODE_PORT,
+        "default_dir": get_safe_base_dir("/root")
+    }
 
 @app.post("/api/auth/login")
 def login(username: str = Form(...), password: str = Form(...)):
@@ -113,27 +125,43 @@ def system_info():
 
 @app.get("/api/files")
 def list_files(path: str = "/root"):
-    target_path = os.path.abspath(path)
-    if not os.path.exists(target_path):
-        target_path = "/root"
+    target_path = get_safe_base_dir(path)
     items = []
     try:
         with os.scandir(target_path) as entries:
             for entry in entries:
                 try:
-                    stat = entry.stat()
+                    stat = entry.stat(follow_symlinks=False)
+                    is_dir = entry.is_dir(follow_symlinks=False)
                     items.append({
                         "name": entry.name,
                         "path": entry.path,
-                        "is_dir": entry.is_dir(),
-                        "size": stat.st_size if not entry.is_dir() else 0,
+                        "is_dir": is_dir,
+                        "size": stat.st_size if not is_dir else 0,
                         "permissions": oct(stat.st_mode)[-3:],
                         "modified": stat.st_mtime
                     })
-                except PermissionError:
+                except (PermissionError, FileNotFoundError, OSError):
                     continue
     except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission Denied")
+        target_path = os.path.expanduser("~")
+        try:
+            with os.scandir(target_path) as entries:
+                for entry in entries:
+                    try:
+                        stat = entry.stat()
+                        items.append({
+                            "name": entry.name,
+                            "path": entry.path,
+                            "is_dir": entry.is_dir(),
+                            "size": stat.st_size if not entry.is_dir() else 0,
+                            "permissions": oct(stat.st_mode)[-3:],
+                            "modified": stat.st_mtime
+                        })
+                    except PermissionError:
+                        continue
+        except Exception:
+            pass
 
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
     return {"current_path": target_path, "items": items}
@@ -223,8 +251,9 @@ def system_stats():
 async def terminal_websocket(websocket: WebSocket):
     await websocket.accept()
     master, slave = pty.openpty()
+    base_dir = get_safe_base_dir("/root")
     env = os.environ.copy()
-    env["HOME"] = "/root"
+    env["HOME"] = base_dir
     env["TERM"] = "xterm-256color"
     proc = subprocess.Popen(
         ["/bin/bash", "-l"],
@@ -232,7 +261,7 @@ async def terminal_websocket(websocket: WebSocket):
         stdin=slave,
         stdout=slave,
         stderr=slave,
-        cwd="/root",
+        cwd=base_dir,
         env=env,
         universal_newlines=False
     )
