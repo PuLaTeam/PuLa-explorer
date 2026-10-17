@@ -846,8 +846,18 @@
 
         // --- Real VS Code ---
         function openVSCode(path = '') {
+            let target = path || currentExplorerPath || '';
+
+            // اگر روی فایل کلیک شده بود، پوشه پروژه آن فایل را باز کن
+            if (selectedItem && selectedItem.path === target && !selectedItem.is_dir) {
+                target = target.substring(0, target.lastIndexOf('/')) || '/';
+            }
+
+            // تضمین اینکه اسلش‌ها خام بمانند و %2F نشوند
+            const cleanPath = target ? target.split('/').map(p => encodeURIComponent(p)).join('/') : '';
+            const vsUrl = `http://${window.location.hostname}:${vscodePort}/?folder=${cleanPath}`;
+
             const body = createWindow('<i class="fa-solid fa-code" style="color:#38bdf8;"></i> Visual Studio Code', 1000, 640);
-            const vsUrl = `http://${window.location.hostname}:${vscodePort}/?folder=${encodeURIComponent(path)}`;
             body.innerHTML = `
                 <div style="background:#222; padding:6px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
                     <span style="font-size:12px; color:#aaa;"><i class="fa-solid fa-bolt"></i> Port ${vscodePort} Active</span>
